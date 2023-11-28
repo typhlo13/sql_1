@@ -79,3 +79,13 @@ INSERT INTO JOUEUR VALUES
 
 INSERT INTO PersoPossede
 VALUES('Player','Bertrand');
+
+INSERT INTO Monstre
+VALUES('Blob',5,1),
+('Gobelin',15,2),
+('Loup',25,3),
+('Sirene',35,4),
+('Ours',50,5),
+('Ogre',60,6),
+('Cyclope',120,7),
+('Dragon',250,8);

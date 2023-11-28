@@ -76,3 +76,6 @@ INSERT INTO ENTITE VALUES
 
 INSERT INTO JOUEUR VALUES
     ("Player", 100);
+
+INSERT INTO PersoPossede
+VALUES('Player','Bertrand');

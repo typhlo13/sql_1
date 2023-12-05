@@ -55,6 +55,28 @@ Nom VARCHAR(10) REFERENCES ENTITE PRIMARY KEY,
 ArgentDrop INTEGER,
 FOREIGN KEY (Nom) REFERENCES ENTITE(Nom));
 
+
+
+CREATE TRIGGER AchatObjet
+BEFORE UPDATE ON ObjetAchete
+
+WHEN (SELECT ArgentJoueur - (SELECT CoutObjet FROM OBJET WHERE NomObjet = new.NomObjet) FROM JOUEUR WHERE NomJoueur = 'Player') >= 0
+
+BEGIN 
+	UPDATE ObjetAchete 
+	SET qte = old.qte + 1 
+	WHERE ObjetAchete.NomObjet = new.NomObjet;
+	
+	UPDATE JOUEUR
+	SET ArgentJoueur = ArgentJoueur - (SELECT CoutObjet FROM OBJET WHERE NomObjet = new.NomObjet);
+	
+END;
+	
+
+
+
+
+
 INSERT INTO SKILL
 VALUES('Attaque Basique','Offensif',1),
 ('Boule Magique', 'Offensif', 1.2),

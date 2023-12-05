@@ -128,3 +128,8 @@ VALUES("Bertrand","Attaque Basique"),
 ("Gobelin","Morsure"),
 ("Ours","Morsure"),
 ("Dragon","Morsure");
+
+INSERT INTO ObjetAchete
+VALUES("Player","Talisman",0),
+("Player","Amulette",0),
+("Player","Baton",0);

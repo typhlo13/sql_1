@@ -70,19 +70,19 @@ FOREIGN KEY (Nom) REFERENCES ENTITE(Nom));
 DROP TRIGGER if EXISTS AchatObjet;
 CREATE TRIGGER AchatObjet
 BEFORE UPDATE ON ObjetAchete
-WHEN (SELECT ArgentJoueur FROM JOUEUR WHERE NomJoueur = 'Player') >= ((SELECT CoutObjet FROM OBJET WHERE NomObjet = NEW.NomObjet) * (NEW.qte - OLD.qte))
+WHEN (SELECT ArgentJoueur FROM JOUEUR WHERE NomJoueur = NEW.NomJoueur) >= ((SELECT CoutObjet FROM OBJET WHERE NomObjet = NEW.NomObjet) * (NEW.qte - OLD.qte))
 BEGIN
    UPDATE ObjetAchete
    SET qte = qte + NEW.qte
    WHERE NomObjet = NEW.NomObjet;
    UPDATE JOUEUR
-   SET ArgentJoueur = (SELECT ArgentJoueur FROM JOUEUR WHERE NomJoueur = 'Player') - ((SELECT CoutObjet FROM OBJET WHERE NomObjet = NEW.NomObjet) * (NEW.qte - OLD.qte));
+   SET ArgentJoueur = (SELECT ArgentJoueur FROM JOUEUR WHERE NomJoueur = NEW.NomJoueur) - ((SELECT CoutObjet FROM OBJET WHERE NomObjet = NEW.NomObjet) * (NEW.qte - OLD.qte));
 END;
 
 DROP TRIGGER IF EXISTS AchatObjetRefuse;
 CREATE TRIGGER AchatObjetRefuse
 BEFORE UPDATE ON ObjetAchete
-WHEN (SELECT ArgentJoueur FROM JOUEUR WHERE NomJoueur = 'Player') < ((SELECT CoutObjet FROM OBJET WHERE NomObjet = NEW.NomObjet) * (NEW.qte - OLD.qte))
+WHEN (SELECT ArgentJoueur FROM JOUEUR WHERE NomJoueur = NEW.NomJoueur) < ((SELECT CoutObjet FROM OBJET WHERE NomObjet = NEW.NomObjet) * (NEW.qte - OLD.qte))
 BEGIN
 	SELECT CASE
 		WHEN NEW.qte <> OLD.qte THEN

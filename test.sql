@@ -14,9 +14,12 @@ DROP TABLE IF EXISTS ENTITE;
 CREATE TABLE ENTITE(
 Nom VARCHAR(10) PRIMARY KEY,
 PVmax INTEGER,
+PVmaxbase INTEGER,
 PVactuels INTEGER,
 Attaque INTEGER,
+Attaquebase INTEGER,
 Defense INTEGER,
+Defensebase INTEGER,
 LettreType CHAR(1) CHECK (LettreType IN ('M', 'A')));
 
 DROP TABLE IF EXISTS SKILL;
@@ -124,6 +127,35 @@ END;
 /* Le trigger en haut permet de débuter un combat, en assignant les PV Max en valeur de PV actuels pour chaque allié que le joueur possède, dès que un monstre a PV Max = PV actuels. (tout en bas)
 Je sais pas si ça peut créer des problèmes ensuite, je suppose que oui mais on verra ça plus tard avec les combats. Normalement si le joueur attaque directement y a pas de problème.*/
 
+DROP TRIGGER IF EXISTS BoostPV;
+CREATE TRIGGER BoostPV
+BEFORE UPDATE ON ObjetAchete
+WHEN NEW.NomObjet = 'Talisman' AND NEW.qte != OLD.qte
+BEGIN
+ UPDATE ENTITE
+ SET PVMax = PVmaxbase + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Talisman') * PVMaxBase) * NEW.qte
+ WHERE LettreType = 'A';
+END;
+
+DROP TRIGGER IF EXISTS BoostDEF;
+CREATE TRIGGER BoostDEF
+AFTER UPDATE ON ObjetAchete
+WHEN NEW.NomObjet = 'Amulette' AND NEW.qte != OLD.qte
+BEGIN
+ UPDATE ENTITE
+ SET Defense = DefenseBase + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Amulette') * DefenseBase) * NEW.qte
+ WHERE LettreType = 'A';
+END;
+
+DROP TRIGGER IF EXISTS BoostATK;
+CREATE TRIGGER BoostATK
+AFTER UPDATE ON ObjetAchete
+WHEN NEW.NomObjet = 'Baton' AND NEW.qte != OLD.qte
+BEGIN
+ UPDATE ENTITE
+ SET AttaqueBase = AttaqueBase + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Baton') * AttaqueBase) * NEW.qte
+ WHERE LettreType = 'A';
+END;
 
 
 /* ========================= FIN TRIGGERS ========================= */
@@ -137,8 +169,8 @@ FROM ENTITE
 WHERE PVactuels > 0;
 
 DROP VIEW IF EXISTS Inventaire;
-CREATE VIEW Inventaire("Nom objet", "Quantité", "Type", "Effet pondéré") AS
-SELECT ObjetAchete.NomObjet, ObjetAchete.qte, OBJET.TypeObjet, OBJET.Effet * ObjetAchete.qte
+CREATE VIEW Inventaire("Nom objet", "Quantité", "Type", "Boost (en %)") AS
+SELECT ObjetAchete.NomObjet, ObjetAchete.qte, OBJET.TypeObjet, OBJET.Effet * ObjetAchete.qte * 100
 FROM ObjetAchete, OBJET
 WHERE ObjetAchete.NomObjet = OBJET.NomObjet
 AND qte > 0;
@@ -148,6 +180,12 @@ CREATE VIEW SkillsUtilisables AS
 SELECT SkillEntite.Nom, SkillEntite.NomSkill
 FROM SkillEntite, PersoPossede
 WHERE PersoPossede.Nom = SkillEntite.Nom;
+
+DROP VIEW IF EXISTS StatsEquipe;
+CREATE VIEW StatsEquipe AS
+SELECT ENTITE.Nom, ENTITE.PVMax, ENTITE.Attaque, ENTITE.Defense
+FROM ENTITE, PersoPossede
+WHERE PersoPossede.Nom = ENTITE.Nom;
 
 /* ========================= FIN VUES ========================= */
 
@@ -165,22 +203,22 @@ INSERT INTO OBJET VALUES
 ('Baton', 'Augmente_Atk', 0.2, 350);
 
 INSERT INTO ENTITE VALUES
-    ("Bertrand", 200,0, 35, 20, 'A'),
-    ("Roseline", 150, 0, 45, 15, 'A'),
-    ("Igor", 350, 0, 20, 45, 'A'),
-    ("Giselle", 400, 0, 50, 50, 'A'),
+    ("Bertrand", 200, 200, 0, 35, 35, 20, 20, 'A'),
+    ("Roseline", 150, 150, 0, 45, 45, 15, 15, 'A'),
+    ("Igor", 350, 350, 0, 20, 20, 45, 45, 'A'),
+    ("Giselle", 400, 400, 0, 50, 50, 50, 50, 'A'),
     
-    ("Loup", 100, 0, 30, 5, 'M'),
-    ("Ogre", 200, 0, 40, 15, 'M'),
-    ("Gobelin", 70, 0, 55, 3, 'M'),
-    ("Blob", 50, 0, 10, 0, 'M'),
-    ("Ours", 150, 0, 50, 20, 'M'),
-    ("Sirene", 100, 0, 50, 10, 'M'),
-    ("Dragon", 400, 0, 250, 90, 'M'),
-    ("Cyclope", 250, 0, 100, 70, 'M');
+    ("Loup", 100, 100, 0, 30, 30, 5, 5, 'M'),
+    ("Ogre", 200, 200, 0, 40, 40, 15, 15, 'M'),
+    ("Gobelin", 70, 70, 0, 55, 55, 3, 3, 'M'),
+    ("Blob", 50, 50, 0, 10, 10, 0, 0, 'M'),
+    ("Ours", 150, 150, 0, 50, 50, 20, 20, 'M'),
+    ("Sirene", 100, 100, 0, 50, 50, 10, 10, 'M'),
+    ("Dragon", 400, 400, 0, 250, 250, 90, 90, 'M'),
+    ("Cyclope", 250, 250, 0, 100, 100, 70, 70, 'M');
 
 INSERT INTO JOUEUR VALUES
-    ("Player", 100);
+    ("Player", 10000000000);
 
 INSERT INTO Monstre
 VALUES('Blob',5,1),
@@ -234,7 +272,8 @@ INSERT INTO MagazinPerso VALUES
 	("Giselle","Player",3000);
 	
 INSERT INTO PersoPossede VALUES
-	("Player","Bertrand");
+	("Player","Bertrand"),
+	("Player", "Giselle");
 	
 /* ===================== COMMANDES A RENTRER POUR JOUER : =====================
 
@@ -256,8 +295,8 @@ des pv actuels supérieurs à 0.
 === Achat de perso ===
 
 INSERT INTO PersoPossede VALUES
-	("Player","[Nom du perso voulu]");
-
+	("Player","[Nom du perso voulu]";
+	
 	
 === Voir stats de perso ===
 

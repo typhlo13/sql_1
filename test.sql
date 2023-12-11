@@ -117,16 +117,39 @@ WHEN (SELECT COUNT(*) FROM ENTITE WHERE LettreType = 'M' AND PVMax = PVactuels) 
 BEGIN
  UPDATE ENTITE
  SET PVactuels = PVMax
- WHERE Nom IN (
+ WHERE Nom IN(
    SELECT Nom
-   FROM PersoPossede
- );
+   FROM PersoPossede);
 END;
 /* Le trigger en haut permet de débuter un combat, en assignant les PV Max en valeur de PV actuels pour chaque allié que le joueur possède, dès que un monstre a PV Max = PV actuels. (tout en bas)
 Je sais pas si ça peut créer des problèmes ensuite, je suppose que oui mais on verra ça plus tard avec les combats. Normalement si le joueur attaque directement y a pas de problème.*/
 
 
-/* ========================= FIN TRIGGERS  ========================= */
+
+/* ========================= FIN TRIGGERS ========================= */
+
+/* ========================= DEBUT VUES ========================= */
+
+DROP VIEW IF EXISTS VueCombat;
+CREATE VIEW VueCombat AS
+SELECT Nom, PVactuels
+FROM ENTITE
+WHERE PVactuels > 0;
+
+DROP VIEW IF EXISTS Inventaire;
+CREATE VIEW Inventaire("Nom objet", "Quantité", "Type", "Effet pondéré") AS
+SELECT ObjetAchete.NomObjet, ObjetAchete.qte, OBJET.TypeObjet, OBJET.Effet * ObjetAchete.qte
+FROM ObjetAchete, OBJET
+WHERE ObjetAchete.NomObjet = OBJET.NomObjet
+AND qte > 0;
+
+DROP VIEW IF EXISTS SkillsUtilisables;
+CREATE VIEW SkillsUtilisables AS
+SELECT SkillEntite.Nom, SkillEntite.NomSkill
+FROM SkillEntite, PersoPossede
+WHERE PersoPossede.Nom = SkillEntite.Nom;
+
+/* ========================= FIN VUES ========================= */
 
 INSERT INTO SKILL
 VALUES('Attaque Basique','Offensif',1),
@@ -216,23 +239,34 @@ INSERT INTO PersoPossede VALUES
 /* ===================== COMMANDES A RENTRER POUR JOUER : =====================
 
 === Début de combat ===
+
 UPDATE ENTITE
 SET PVactuels = PVMax
 WHERE Nom IN (
-  SELECT Nom
-  FROM ENTITE
-  WHERE LettreType = 'M'
-  ORDER BY RANDOM()
-  LIMIT 1
-); 
+	SELECT Nom
+	FROM ENTITE
+	WHERE LettreType = 'M'
+	ORDER BY RANDOM()
+	LIMIT 1); 
 
-Prend un monstre aléatoire et lui assigne la valeur de PVMax dans PVactuels, ce qui commence le combat. Le combat sera gérée par une vue qui n'affiche que les monstres et alliés ayant
-des pv actuels supérieurs à 0, j'ai toujours pas fait ça.
-
+Prend un monstre aléatoire et lui assigne la valeur de PVMax dans PVactuels, ce qui commence le combat. Le combat est géré par une vue qui n'affiche que les monstres et alliés ayant
+des pv actuels supérieurs à 0.
 
 
 === Achat de perso ===
+
 INSERT INTO PersoPossede VALUES
 	("Player","[Nom du perso voulu]");
 
+	
+=== Voir stats de perso ===
+
+SELECT * FROM ENTITE
+WHERE Nom = [Nom du perso];
+
+
+=== Voir argent du joueur ===
+
+SELECT ArgentJoueur FROM JOUEUR
+WHERE NomJoueur = [Nom du joueur];
 */

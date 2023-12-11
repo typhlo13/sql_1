@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS ENTITE;
 CREATE TABLE ENTITE(
 Nom VARCHAR(10) PRIMARY KEY,
 PVmax INTEGER,
+PVactuels INTEGER,
 Attaque INTEGER,
 Defense INTEGER,
 LettreType CHAR(1) CHECK (LettreType IN ('M', 'A')));
@@ -109,7 +110,20 @@ BEGIN
                     (SELECT CoutAllie FROM MagazinPerso WHERE NomJoueur = NEW.NomJoueur AND Nom = NEW.Nom);
 END;
 
-
+DROP TRIGGER IF EXISTS DebutCombat;
+CREATE TRIGGER DebutCombat
+AFTER UPDATE ON ENTITE
+WHEN (SELECT COUNT(*) FROM ENTITE WHERE LettreType = 'M' AND PVMax = PVactuels) > 0
+BEGIN
+ UPDATE ENTITE
+ SET PVactuels = PVMax
+ WHERE Nom IN (
+   SELECT Nom
+   FROM PersoPossede
+ );
+END;
+/* Le trigger en haut permet de débuter un combat, en assignant les PV Max en valeur de PV actuels pour chaque allié que le joueur possède, dès que un monstre a PV Max = PV actuels. (tout en bas)
+Je sais pas si ça peut créer des problèmes ensuite, je suppose que oui mais on verra ça plus tard avec les combats. Normalement si le joueur attaque directement y a pas de problème.*/
 
 
 /* ========================= FIN TRIGGERS  ========================= */
@@ -128,19 +142,19 @@ INSERT INTO OBJET VALUES
 ('Baton', 'Augmente_Atk', 0.2, 350);
 
 INSERT INTO ENTITE VALUES
-    ("Bertrand", 200, 35, 20, 'A'),
-    ("Roseline", 150, 45, 15, 'A'),
-    ("Igor", 350, 20, 45, 'A'),
-    ("Giselle", 400, 50, 50, 'A'),
+    ("Bertrand", 200,0, 35, 20, 'A'),
+    ("Roseline", 150, 0, 45, 15, 'A'),
+    ("Igor", 350, 0, 20, 45, 'A'),
+    ("Giselle", 400, 0, 50, 50, 'A'),
     
-    ("Loup", 100, 30, 5, 'M'),
-    ("Ogre", 200, 40, 15, 'M'),
-    ("Gobelin", 70, 55, 3, 'M'),
-    ("Blob", 50, 10, 0, 'M'),
-    ("Ours", 150, 50, 20, 'M'),
-    ("Sirene", 100, 50, 10, 'M'),
-    ("Dragon", 400, 250, 90, 'M'),
-    ("Cyclope", 250, 100, 70, 'M');
+    ("Loup", 100, 0, 30, 5, 'M'),
+    ("Ogre", 200, 0, 40, 15, 'M'),
+    ("Gobelin", 70, 0, 55, 3, 'M'),
+    ("Blob", 50, 0, 10, 0, 'M'),
+    ("Ours", 150, 0, 50, 20, 'M'),
+    ("Sirene", 100, 0, 50, 10, 'M'),
+    ("Dragon", 400, 0, 250, 90, 'M'),
+    ("Cyclope", 250, 0, 100, 70, 'M');
 
 INSERT INTO JOUEUR VALUES
     ("Player", 100);
@@ -198,3 +212,27 @@ INSERT INTO MagazinPerso VALUES
 	
 INSERT INTO PersoPossede VALUES
 	("Player","Bertrand");
+	
+/* ===================== COMMANDES A RENTRER POUR JOUER : =====================
+
+=== Début de combat ===
+UPDATE ENTITE
+SET PVactuels = PVMax
+WHERE Nom IN (
+  SELECT Nom
+  FROM ENTITE
+  WHERE LettreType = 'M'
+  ORDER BY RANDOM()
+  LIMIT 1
+); 
+
+Prend un monstre aléatoire et lui assigne la valeur de PVMax dans PVactuels, ce qui commence le combat. Le combat sera gérée par une vue qui n'affiche que les monstres et alliés ayant
+des pv actuels supérieurs à 0, j'ai toujours pas fait ça.
+
+
+
+=== Achat de perso ===
+INSERT INTO PersoPossede VALUES
+	("Player","[Nom du perso voulu]");
+
+*/

@@ -13,12 +13,8 @@ CoutObjet INTEGER) ;
 DROP TABLE IF EXISTS ENTITE;
 CREATE TABLE ENTITE(
 Nom VARCHAR(10) PRIMARY KEY,
-PVmax INTEGER,
 PVmaxbase INTEGER,
-PVactuels INTEGER,
-Attaque INTEGER,
 Attaquebase INTEGER,
-Defense INTEGER,
 Defensebase INTEGER,
 LettreType CHAR(1) CHECK (LettreType IN ('M', 'A')));
 
@@ -34,7 +30,7 @@ DROP TABLE IF EXISTS ObjetAchete;
 CREATE TABLE ObjetAchete(
 NomJoueur VARCHAR(10) REFERENCES JOUEUR,
 NomObjet VARCHAR(10) REFERENCES OBJET,
-qte INTEGER NOT NULL,
+qte INTEGER,
 PRIMARY KEY(NomJoueur, NomObjet),
 FOREIGN KEY (NomJoueur) REFERENCES JOUEUR(NomJoueur),
 FOREIGN KEY (NomObjet) REFERENCES OBJET(NomObjet));
@@ -71,10 +67,32 @@ ArgentDrop INTEGER,
 IdMontre INTEGER,
 FOREIGN KEY (Nom) REFERENCES ENTITE(Nom));
 
+DROP TABLE IF EXISTS COMBAT;
+CREATE TABLE COMBAT(
+Nom VARCHAR(10) PRIMARY KEY REFERENCES ENTITE,
+PVactuels INTEGER,
+Attaque INTEGER,
+Defense INTEGER,
+LettreType CHAR(1) CHECK (LettreType IN ('M', 'A')));
+
+
 DROP TABLE IF EXISTS ChoixSkill;
-CREATE TABLE ChoixSkill(
-NomJoueur VARCHAR(10) PRIMARY KEY REFERENCES JOUEUR,
-SkillChoisi VARCHAR(10));
+
+DROP VIEW IF EXISTS VueCombat;
+
+
+DROP VIEW IF EXISTS Inventaire;
+CREATE VIEW Inventaire("Nom objet", "Quantité", "Type", "Boost (en %)") AS
+SELECT ObjetAchete.NomObjet, ObjetAchete.qte, OBJET.TypeObjet, OBJET.Effet * ObjetAchete.qte * 100
+FROM ObjetAchete, OBJET
+WHERE ObjetAchete.NomObjet = OBJET.NomObjet;
+
+DROP VIEW IF EXISTS SkillsUtilisables;
+CREATE VIEW SkillsUtilisables AS
+SELECT SkillEntite.Nom, SkillEntite.NomSkill
+FROM SkillEntite, PersoPossede
+WHERE PersoPossede.Nom = SkillEntite.Nom;
+
 
 /* ========================= DEBUT TRIGGERS ========================= */
 
@@ -118,119 +136,84 @@ BEGIN
   UPDATE JOUEUR
   SET ArgentJoueur = (SELECT ArgentJoueur FROM JOUEUR WHERE NomJoueur = NEW.NomJoueur) - 
                     (SELECT CoutAllie FROM MagazinPerso WHERE NomJoueur = NEW.NomJoueur AND Nom = NEW.Nom);
+					
+	DELETE FROM MagazinPerso
+	WHERE Nom = New.Nom;
 END;
 
 DROP TRIGGER IF EXISTS DebutCombat;
-CREATE TRIGGER DebutCombat
-AFTER UPDATE ON ENTITE
-WHEN (SELECT COUNT(*) FROM ENTITE WHERE LettreType = 'M' AND PVMax = PVactuels) > 0
-BEGIN
- UPDATE ENTITE
- SET PVactuels = PVMax
- WHERE Nom IN(
-   SELECT Nom
-   FROM PersoPossede);
-END;
-/* Le trigger en haut permet de débuter un combat, en assignant les PV Max en valeur de PV actuels pour chaque allié que le joueur possède, dès que un monstre a PV Max = PV actuels. (tout en bas)
-Je sais pas si ça peut créer des problèmes ensuite, je suppose que oui mais on verra ça plus tard avec les combats. Normalement si le joueur attaque directement y a pas de problème.*/
 
-DROP TRIGGER IF EXISTS BoostPV;
-CREATE TRIGGER BoostPV
-BEFORE UPDATE ON ObjetAchete
-WHEN NEW.NomObjet = 'Talisman' AND NEW.qte != OLD.qte
+
+
+DROP TRIGGER IF EXISTS BoostStats;
+
+CREATE TRIGGER BoostStats
+AFTER INSERT ON COMBAT
+WHEN Nom = new.Nom AND LettreType = 'A'
 BEGIN
- UPDATE ENTITE
- SET PVMax = PVmaxbase + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Talisman') * PVMaxBase) * NEW.qte
+ UPDATE COMBAT
+ SET PVactuels = (SELECT PVmaxbase FROM ENTITE WHERE Nom = new.Nom) + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Talisman') * PVmaxbase) * (SELECT qte FROM ObjetAchete WHERE NomObjet = 'Talisman')
+ WHERE LettreType = 'A';
+ UPDATE COMBAT
+ SET Defense = (SELECT Defensebase FROM ENTITE WHERE Nom = new.Nom) + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Amulette') * Defensebase) * (SELECT qte FROM ObjetAchete WHERE NomObjet = 'Amulette')
+ WHERE LettreType = 'A';
+ UPDATE COMBAT
+ SET Attaque = (SELECT Attaquebase FROM ENTITE WHERE Nom = new.Nom) + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Baton') * Attaquebase) * (SELECT qte FROM ObjetAchete WHERE NomObjet = 'Baton')
  WHERE LettreType = 'A';
 END;
 
-/*A changer : faire en sorte que la vérification soit TypeObjet = Augmente_Vie, mais j'ai la flemme de faire ça. Actuellement ça marche donc c'est pas grave.*/
+DROP TRIGGER IF EXISTS Victoire;
+CREATE TRIGGER Victoire
+AFTER UPDATE ON COMBAT
+WHEN (SELECT PVactuels FROM COMBAT WHERE Nom = new.Nom AND LettreType = 'M') <= 0
+BEGIN
+	UPDATE JOUEUR
+	SET ArgentJoueur = old.ArgentJoueur + (SELECT ArgentDrop FROM Monstre, COMBAT WHERE COMBAT.Nom = Monstre.Nom AND LettreType = 'M');
+	DELETE FROM COMBAT;
+END;
+
+DROP TRIGGER IF EXISTS Defaite;
+CREATE TRIGGER Defaite
+AFTER UPDATE ON COMBAT
+WHEN (SELECT PVactuels FROM COMBAT WHERE Nom = new.Nom AND LettreType = 'A') <= 0
+BEGIN
+	DELETE FROM COMBAT;
+END;
+
+DROP TRIGGER IF EXISTS VerifInsertion;
+CREATE TRIGGER VerifInsertion
+BEFORE INSERT ON COMBAT
+WHEN Nom = new.Nom AND Nom NOT IN (SELECT Nom FROM PersoPossede)
+BEGIN
+	SELECT RAISE(ABORT,"Vous n'avez pas ce perso");
+END;
+
+
 
 DROP TRIGGER IF EXISTS BoostDEF;
-CREATE TRIGGER BoostDEF
-AFTER UPDATE ON ObjetAchete
-WHEN NEW.NomObjet = 'Amulette' AND NEW.qte != OLD.qte
-BEGIN
- UPDATE ENTITE
- SET Defense = DefenseBase + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Amulette') * DefenseBase) * NEW.qte
- WHERE LettreType = 'A';
-END;
 
-/*A changer : faire en sorte que la vérification soit TypeObjet = Augmente_Def, mais j'ai la flemme de faire ça. Actuellement ça marche donc c'est pas grave.*/
+
+
 
 DROP TRIGGER IF EXISTS BoostATK;
-CREATE TRIGGER BoostATK
-AFTER UPDATE ON ObjetAchete
-WHEN NEW.NomObjet = 'Baton' AND NEW.qte != OLD.qte
-BEGIN
- UPDATE ENTITE
- SET AttaqueBase = AttaqueBase + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Baton') * AttaqueBase) * NEW.qte
- WHERE LettreType = 'A';
-END;
 
-/*A changer : faire en sorte que la vérification soit TypeObjet = Augmente_Atk, mais j'ai la flemme de faire ça. Actuellement ça marche donc c'est pas grave.*/
+
+
 
 DROP TRIGGER IF EXISTS CheckSkillInsert;
-CREATE TRIGGER CheckSkillInsert
-BEFORE INSERT ON ChoixSkill
-BEGIN
-    SELECT CASE
-        WHEN NEW.SkillChoisi NOT IN (
-            SELECT SkillEntite.NomSkill
-            FROM SkillEntite, PersoPossede
-            WHERE PersoPossede.Nom = SkillEntite.Nom
-        ) THEN
-            RAISE(ABORT, "Ce skill n'est pas disponible.")
-    END;
-END;
 
 DROP TRIGGER IF EXISTS CheckSkillUpdate;
-CREATE TRIGGER CheckSkillUpdate
-BEFORE UPDATE ON ChoixSkill
-BEGIN
-    SELECT CASE
-        WHEN NEW.SkillChoisi NOT IN (
-            SELECT SkillEntite.NomSkill
-            FROM SkillEntite, PersoPossede
-            WHERE PersoPossede.Nom = SkillEntite.Nom
-        ) THEN
-            RAISE(ABORT, "Ce skill n'est pas disponible.")
-    END;
-END;
 
-/*Reste à faire : - il faut qu'il y ait un trigger qui réagisse à l'update ou à l'insert dans ChoixSkill pour savoir quoi faire ensuite.
-				  - il faut pleins de triggers pour vérifier si un combat est finie ou pas. Attention : A cause des triggers en bordel, quand un combat débute, il dit directement qu'il est fini 
-				  car il vérifie si le combat est fini avant d'update en changeant la vie des alliés. Pour fixer ça, je pense qu'il faudrait faire en sorte que les entités commencent le combat
-				  avec PVactuels = PVmax +1, donc un allié aura par exemple 201 PV au début. Si PVactuels > PVmax -> alors il ne faut pas finir le combat, sinon -> le combat peut se finir.*/
-				  
+
+/*Reste à faire : - Faire des vérification sur le bon fonctionnement des nouveaux triggers (car on a eu un problème sur le fait qu'on arrive même pas à insérer dans la table COMBAT de manière toute basique)
 /* ========================= FIN TRIGGERS ========================= */
 
 /* ========================= DEBUT VUES ========================= */
 
-DROP VIEW IF EXISTS VueCombat;
-CREATE VIEW VueCombat AS
-SELECT Nom, PVactuels
-FROM ENTITE
-WHERE PVactuels > 0;
 
-DROP VIEW IF EXISTS Inventaire;
-CREATE VIEW Inventaire("Nom objet", "Quantité", "Type", "Boost (en %)") AS
-SELECT ObjetAchete.NomObjet, ObjetAchete.qte, OBJET.TypeObjet, OBJET.Effet * ObjetAchete.qte * 100
-FROM ObjetAchete, OBJET
-WHERE ObjetAchete.NomObjet = OBJET.NomObjet
-AND qte > 0;
-
-DROP VIEW IF EXISTS SkillsUtilisables;
-CREATE VIEW SkillsUtilisables AS
-SELECT SkillEntite.Nom, SkillEntite.NomSkill
-FROM SkillEntite, PersoPossede
-WHERE PersoPossede.Nom = SkillEntite.Nom;
 
 DROP VIEW IF EXISTS StatsEquipe;
-CREATE VIEW StatsEquipe AS
-SELECT ENTITE.Nom, ENTITE.PVMax, ENTITE.Attaque, ENTITE.Defense
-FROM ENTITE, PersoPossede
-WHERE PersoPossede.Nom = ENTITE.Nom;
+
 
 /* ========================= FIN VUES ========================= */
 

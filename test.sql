@@ -22,6 +22,8 @@ Defense INTEGER,
 Defensebase INTEGER,
 LettreType CHAR(1) CHECK (LettreType IN ('M', 'A')));
 
+/*L'horreur en haut avec les colonnes "base", c'est pour calculer les boosts de stats grâce aux objets. Sans ça, les pourcentages marchent mal et sont inconsistants.*/
+
 DROP TABLE IF EXISTS SKILL;
 CREATE TABLE SKILL (
 NomSkill VARCHAR(10) PRIMARY KEY,
@@ -68,6 +70,11 @@ Nom VARCHAR(10) REFERENCES ENTITE PRIMARY KEY,
 ArgentDrop INTEGER,
 IdMontre INTEGER,
 FOREIGN KEY (Nom) REFERENCES ENTITE(Nom));
+
+DROP TABLE IF EXISTS ChoixSkill;
+CREATE TABLE ChoixSkill(
+NomJoueur VARCHAR(10) PRIMARY KEY REFERENCES JOUEUR,
+SkillChoisi VARCHAR(10));
 
 /* ========================= DEBUT TRIGGERS ========================= */
 
@@ -137,6 +144,8 @@ BEGIN
  WHERE LettreType = 'A';
 END;
 
+/*A changer : faire en sorte que la vérification soit TypeObjet = Augmente_Vie, mais j'ai la flemme de faire ça. Actuellement ça marche donc c'est pas grave.*/
+
 DROP TRIGGER IF EXISTS BoostDEF;
 CREATE TRIGGER BoostDEF
 AFTER UPDATE ON ObjetAchete
@@ -146,6 +155,8 @@ BEGIN
  SET Defense = DefenseBase + ((SELECT Effet FROM OBJET WHERE NomObjet = 'Amulette') * DefenseBase) * NEW.qte
  WHERE LettreType = 'A';
 END;
+
+/*A changer : faire en sorte que la vérification soit TypeObjet = Augmente_Def, mais j'ai la flemme de faire ça. Actuellement ça marche donc c'est pas grave.*/
 
 DROP TRIGGER IF EXISTS BoostATK;
 CREATE TRIGGER BoostATK
@@ -157,7 +168,41 @@ BEGIN
  WHERE LettreType = 'A';
 END;
 
+/*A changer : faire en sorte que la vérification soit TypeObjet = Augmente_Atk, mais j'ai la flemme de faire ça. Actuellement ça marche donc c'est pas grave.*/
 
+DROP TRIGGER IF EXISTS CheckSkillInsert;
+CREATE TRIGGER CheckSkillInsert
+BEFORE INSERT ON ChoixSkill
+BEGIN
+    SELECT CASE
+        WHEN NEW.SkillChoisi NOT IN (
+            SELECT SkillEntite.NomSkill
+            FROM SkillEntite, PersoPossede
+            WHERE PersoPossede.Nom = SkillEntite.Nom
+        ) THEN
+            RAISE(ABORT, "Ce skill n'est pas disponible.")
+    END;
+END;
+
+DROP TRIGGER IF EXISTS CheckSkillUpdate;
+CREATE TRIGGER CheckSkillUpdate
+BEFORE UPDATE ON ChoixSkill
+BEGIN
+    SELECT CASE
+        WHEN NEW.SkillChoisi NOT IN (
+            SELECT SkillEntite.NomSkill
+            FROM SkillEntite, PersoPossede
+            WHERE PersoPossede.Nom = SkillEntite.Nom
+        ) THEN
+            RAISE(ABORT, "Ce skill n'est pas disponible.")
+    END;
+END;
+
+/*Reste à faire : - il faut qu'il y ait un trigger qui réagisse à l'update ou à l'insert dans ChoixSkill pour savoir quoi faire ensuite.
+				  - il faut pleins de triggers pour vérifier si un combat est finie ou pas. Attention : A cause des triggers en bordel, quand un combat débute, il dit directement qu'il est fini 
+				  car il vérifie si le combat est fini avant d'update en changeant la vie des alliés. Pour fixer ça, je pense qu'il faudrait faire en sorte que les entités commencent le combat
+				  avec PVactuels = PVmax +1, donc un allié aura par exemple 201 PV au début. Si PVactuels > PVmax -> alors il ne faut pas finir le combat, sinon -> le combat peut se finir.*/
+				  
 /* ========================= FIN TRIGGERS ========================= */
 
 /* ========================= DEBUT VUES ========================= */
@@ -272,8 +317,7 @@ INSERT INTO MagazinPerso VALUES
 	("Giselle","Player",3000);
 	
 INSERT INTO PersoPossede VALUES
-	("Player","Bertrand"),
-	("Player", "Giselle");
+	("Player","Bertrand");
 	
 /* ===================== COMMANDES A RENTRER POUR JOUER : =====================
 
@@ -308,4 +352,10 @@ WHERE Nom = [Nom du perso];
 
 SELECT ArgentJoueur FROM JOUEUR
 WHERE NomJoueur = [Nom du joueur];
+
+=== Choisir une attaque ===
+
+INSERT INTO ChoixSkill(NomJoueur, SkillChoisi) 
+VALUES ("[Nom du joueur]", "[Nom du skill]")
+ON CONFLICT(NomJoueur) DO UPDATE SET SkillChoisi = "[Nom du skill]";
 */
